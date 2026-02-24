@@ -1,0 +1,13 @@
+package com.sap.myteam.versioncontrolsystem;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class VersionControlSystemApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(VersionControlSystemApplication.class, args);
+    }
+
+}

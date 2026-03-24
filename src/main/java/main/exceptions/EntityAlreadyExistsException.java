@@ -1,7 +1,7 @@
 package main.exceptions;
 
-public class UsernameExistsException extends RuntimeException {
-    public UsernameExistsException(String message) {
+public class EntityAlreadyExistsException extends RuntimeException {
+    public EntityAlreadyExistsException(String message) {
         super(message);
     }
 }

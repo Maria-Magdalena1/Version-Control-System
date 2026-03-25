@@ -1,13 +1,11 @@
 package main.services;
 
 import jakarta.transaction.Transactional;
-import main.entities.AuditLog;
 import main.entities.Role;
 import main.entities.User;
 import main.exceptions.*;
-import main.repositories.AuditLogRepository;
 import main.repositories.UserRepository;
-import main.web.dto.UserDTO;
+import main.web.UserDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -27,15 +25,15 @@ public class UserService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuditLogRepository auditLogRepository;
+    private final AuditLogService auditLogService;
 
     @Autowired
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       AuditLogRepository auditLogRepository) {
+                       AuditLogService auditLogService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.auditLogRepository = auditLogRepository;
+        this.auditLogService = auditLogService;
     }
 
     private User getUserByUsername(String username) {
@@ -62,9 +60,6 @@ public class UserService implements UserDetailsService {
         userRepository.save(user);
     }
 
-    private void saveLog(AuditLog log) {
-        auditLogRepository.save(log);
-    }
 
     public void register(UserDTO userDto) {
 
@@ -92,15 +87,8 @@ public class UserService implements UserDetailsService {
 
         saveUser(user);
 
-        AuditLog log = AuditLog.builder()
-                .user(user)
-                .action("USER REGISTERED")
-                .targetUser(user)
-                .details("Register User: " + userDto.getUsername())
-                .performedAt(LocalDateTime.now())
-                .build();
-
-        saveLog(log);
+        auditLogService.createLogForUser(user, "USER REGISTERED", user,
+                "Registered User: " + userDto.getUsername());
     }
 
     public String login(String username, String password) {
@@ -112,22 +100,14 @@ public class UserService implements UserDetailsService {
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        AuditLog log = AuditLog.builder()
-                .user(user)
-                .action("USER LOGGED IN")
-                .targetUser(user)
-                .details("Login User: " + user.getUsername())
-                .performedAt(LocalDateTime.now())
-                .build();
+        auditLogService.createLogForUser(user, "USER LOGGED IN", user, "Login User: " + username);
 
-        saveLog(log);
         return "Welcome";
     }
 
     @PreAuthorize("hasRole('ADMINISTRATOR')")
     public void changeUserRole(UUID userId, Role newRole, UUID adminId) {
         User user = getUserById(userId);
-
         User admin = getUserById(adminId);
 
         Role oldRole = user.getRole();
@@ -138,14 +118,7 @@ public class UserService implements UserDetailsService {
 
         saveUser(user);
 
-        AuditLog log = AuditLog.builder()
-                .user(admin)
-                .action("CHANGE ROLE")
-                .targetUser(user)
-                .details(String.format("Changed role from %s to %s", oldRole, newRole))
-                .performedAt(LocalDateTime.now())
-                .build();
-        saveLog(log);
+        auditLogService.createLogForUser(admin, "CHANGE ROLE", user, String.format("Changed role from %s to %s", oldRole, newRole));
     }
 
     public void changePassword(UUID userId, String oldPassword, String newPassword) {
@@ -164,14 +137,7 @@ public class UserService implements UserDetailsService {
         user.setUpdatedBy(userId);
         saveUser(user);
 
-        AuditLog log = AuditLog.builder()
-                .user(user)
-                .action("CHANGE PASSWORD")
-                .targetUser(user)
-                .details("User changed their own password")
-                .performedAt(LocalDateTime.now())
-                .build();
-        saveLog(log);
+        auditLogService.createLogForUser(user, "CHANGE PASSWORD", user, "User changed their own password");
     }
 
     @PreAuthorize("hasRole('ADMINISTRATOR')")
@@ -185,15 +151,7 @@ public class UserService implements UserDetailsService {
         user.setUpdatedAt(LocalDateTime.now());
         saveUser(user);
 
-        AuditLog log = AuditLog.builder()
-                .user(admin)
-                .action("DEACTIVATE ROLE")
-                .targetUser(user)
-                .details("Deactivate user " + user.getUsername())
-                .performedAt(LocalDateTime.now())
-                .build();
-
-        saveLog(log);
+        auditLogService.createLogForUser(admin, "DEACTIVATE USER", user, "Deactivate user " + user.getUsername());
     }
 
     @Override
@@ -207,7 +165,7 @@ public class UserService implements UserDetailsService {
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getUsername())
                 .password(user.getPassword())
-                .authorities(user.getRole().name())
+                .roles(user.getRole().name())
                 .build();
     }
 }

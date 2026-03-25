@@ -43,9 +43,8 @@ public class UserService implements UserDetailsService {
     }
 
     private User getUserById(UUID userId) {
-        User user = userRepository.findById(userId)
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-        return user;
     }
 
     private boolean usernameExists(String username) {

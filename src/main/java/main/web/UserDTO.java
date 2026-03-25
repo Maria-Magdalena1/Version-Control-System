@@ -1,4 +1,4 @@
-package main.web.dto;
+package main.web;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

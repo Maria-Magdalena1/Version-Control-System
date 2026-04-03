@@ -145,12 +145,35 @@ public class UserService implements UserDetailsService {
 
         User admin = getUserById(adminId);
 
-        user.setActive(false);
-        user.setUpdatedBy(adminId);
-        user.setUpdatedAt(LocalDateTime.now());
-        saveUser(user);
+        if (!user.isActive()) {
+            System.out.println("User is already deactivated");
+            auditLogService.createLogForUser(admin, "USER ALREADY DEACTIVATED", user, "User deactivated");
+        } else {
+            user.setActive(false);
+            user.setUpdatedBy(adminId);
+            user.setUpdatedAt(LocalDateTime.now());
+            saveUser(user);
 
-        auditLogService.createLogForUser(admin, "DEACTIVATE USER", user, "Deactivate user " + user.getUsername());
+            auditLogService.createLogForUser(admin, "DEACTIVATE USER", user, "Deactivate user " + user.getUsername());
+        }
+    }
+
+    @PreAuthorize("hasRole('ADMINISTRATOR')")
+    public void activate(UUID userId, UUID adminId) {
+        User user = getUserById(userId);
+        User admin = getUserById(adminId);
+
+        if (user.isActive()) {
+            System.out.println("User is already activated");
+            auditLogService.createLogForUser(admin, "USER ALREADY ACTIVATED", user, "User activated");
+        } else {
+            user.setActive(true);
+            user.setUpdatedBy(adminId);
+            user.setUpdatedAt(LocalDateTime.now());
+            saveUser(user);
+
+            auditLogService.createLogForUser(admin, "ACTIVATE USER", user, "Activate user " + user.getUsername());
+        }
     }
 
     @Override

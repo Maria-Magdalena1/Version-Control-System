@@ -5,6 +5,7 @@ import main.entities.VersionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -13,4 +14,6 @@ public interface DocumentVersionRepository extends JpaRepository<DocumentVersion
     Optional<DocumentVersion> findTopByDocument_DocumentIdAndStatusOrderByCreatedAtDesc(UUID documentId, VersionStatus versionStatus);
 
     Optional<DocumentVersion> findDocumentVersionByDocument_DocumentIdAndIsActiveIsTrue(UUID documentId);
+
+    List<DocumentVersion> findAllByDocument_DocumentIdOrderByCreatedAtAsc(UUID documentDocumentId);
 }

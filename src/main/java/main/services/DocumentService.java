@@ -1,5 +1,8 @@
 package main.services;
 
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.layout.element.Paragraph;
 import jakarta.transaction.Transactional;
 import main.entities.*;
 import main.exceptions.ActiveVersionNotFoundException;
@@ -13,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -58,7 +63,7 @@ public class DocumentService {
     public void createNewVersion(UUID documentId, String changeType, String content) {
         DocumentVersion lastVersion = documentVersionService
                 .findDocumentVersionByDocumentIdAndIsActiveIsTrue(documentId)
-                .orElseThrow(()-> new ActiveVersionNotFoundException("No active version found"));
+                .orElseThrow(() -> new ActiveVersionNotFoundException("No active version found"));
 
         int major = lastVersion.getVersionMajor();
         int minor = lastVersion.getVersionMinor();
@@ -111,7 +116,7 @@ public class DocumentService {
 
     @PreAuthorize("hasRole('REVIEWER')")
     public void approveVersion(UUID versionId, User reviewer) {
-        DocumentVersion version=documentVersionService.findById(versionId);
+        DocumentVersion version = documentVersionService.findById(versionId);
 
         if (version.getStatus() != VersionStatus.PENDING) {
             throw new InvalidVersionStatusException("Only pending versions can be approved");
@@ -119,13 +124,13 @@ public class DocumentService {
 
         version.setStatus(VersionStatus.APPROVED);
         documentVersionService.activateVersion(version);
-        auditLogService.createLogForDocument(reviewer,"APPROVE VERSION",version.getDocument(),
-               version,file,String.format("Version %s approved by %s.", version.getVersionNumber(), reviewer));
+        auditLogService.createLogForDocument(reviewer, "APPROVE VERSION", version.getDocument(),
+                version, file, String.format("Version %s approved by %s.", version.getVersionNumber(), reviewer));
     }
 
     @PreAuthorize("hasRole('REVIEWER')")
     public void rejectVersion(UUID versionId, User reviewer, String reason) {
-        DocumentVersion version=documentVersionService.findById(versionId);
+        DocumentVersion version = documentVersionService.findById(versionId);
 
         if (version.getStatus() != VersionStatus.PENDING) {
             throw new InvalidVersionStatusException("Only pending versions can be rejected");
@@ -135,11 +140,11 @@ public class DocumentService {
         version.setComment(reason);
         documentVersionService.rollbackToPreviousVersion(version);
 
-        auditLogService.createLogForDocument(reviewer,"REJECT VERSION",version.getDocument(),
-                version,file,String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer,reason));
+        auditLogService.createLogForDocument(reviewer, "REJECT VERSION", version.getDocument(),
+                version, file, String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer, reason));
     }
 
-    @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'READER', 'ADMINISTRATOR')")
+    @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
     public List<DocumentVersion> getVersionHistory(UUID documentId) {
         documentRepository.findById(documentId)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
@@ -150,6 +155,55 @@ public class DocumentService {
     @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'READER', 'ADMINISTRATOR')")
     public VersionComparisonResult compareVersions(UUID versionId1, UUID versionId2) {
         return documentVersionService.compareVersions(versionId1, versionId2);
+    }
+
+    @PreAuthorize("hasAnyRole('READER', 'AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
+    public DocumentVersion getActiveVersion(UUID documentId) {
+        return documentVersionService
+                .findDocumentVersionByDocumentIdAndIsActiveIsTrue(documentId)
+                .orElseThrow(() -> new ActiveVersionNotFoundException("No active version found"));
+    }
+
+    @PreAuthorize("hasAnyRole('READER', 'AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
+    public List<DocumentVersion> getApprovedVersions(UUID documentId) {
+        documentRepository.findById(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
+
+        return documentVersionService.findApprovedVersionsByDocumentId(documentId);
+    }
+
+    @PreAuthorize("hasAnyRole('READER', 'AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
+    public byte[] exportToPdf(UUID documentId) {
+        DocumentVersion activeVersion = getActiveVersion(documentId);
+
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(outputStream);
+            PdfDocument pdf = new PdfDocument(writer);
+            com.itextpdf.layout.Document pdfDocument = new com.itextpdf.layout.Document(pdf);
+
+            pdfDocument.add(new Paragraph("Title: " + activeVersion.getDocument().getTitle()));
+            pdfDocument.add(new Paragraph("Version: " + activeVersion.getVersionNumber()));
+            pdfDocument.add(new Paragraph("Author: " + activeVersion.getCreatedBy().getUsername()));
+            pdfDocument.add(new Paragraph("Date: " + activeVersion.getCreatedAt()));
+            pdfDocument.add(new Paragraph("Status: " + activeVersion.getStatus()));
+            pdfDocument.add(new Paragraph("Content: \n" + activeVersion.getContent()));
+
+            pdfDocument.close();
+
+            auditLogService.createLogForDocument(
+                    activeVersion.getCreatedBy(),
+                    "EXPORT TO PDF",
+                    activeVersion.getDocument(),
+                    activeVersion,
+                    file,
+                    String.format("Document %s exported to PDF", activeVersion.getDocument().getTitle())
+            );
+
+            return outputStream.toByteArray();
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to export document to PDF", e);
+        }
     }
 
     public void saveDocument(Document document) {

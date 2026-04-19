@@ -121,4 +121,9 @@ public class DocumentVersionService {
     public List<DocumentVersion> getVersionHistory(UUID documentId) {
         return documentVersionRepository.findAllByDocument_DocumentIdOrderByCreatedAtAsc(documentId);
     }
+
+    public List<DocumentVersion> findApprovedVersionsByDocumentId(UUID documentId) {
+        return documentVersionRepository
+                .findAllByDocument_DocumentIdAndStatusOrderByCreatedAtAsc(documentId, VersionStatus.APPROVED);
+    }
 }

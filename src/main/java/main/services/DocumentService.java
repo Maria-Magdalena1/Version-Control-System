@@ -8,11 +8,13 @@ import main.exceptions.InvalidVersionStatusException;
 import main.exceptions.UnauthorizedException;
 import main.repositories.DocumentRepository;
 import main.web.DocumentDTO;
+import main.web.VersionComparisonResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -135,6 +137,19 @@ public class DocumentService {
 
         auditLogService.createLogForDocument(reviewer,"REJECT VERSION",version.getDocument(),
                 version,file,String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer,reason));
+    }
+
+    @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'READER', 'ADMINISTRATOR')")
+    public List<DocumentVersion> getVersionHistory(UUID documentId) {
+        documentRepository.findById(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
+
+        return documentVersionService.getVersionHistory(documentId);
+    }
+
+    @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'READER', 'ADMINISTRATOR')")
+    public VersionComparisonResult compareVersions(UUID versionId1, UUID versionId2) {
+        return documentVersionService.compareVersions(versionId1, versionId2);
     }
 
     public void saveDocument(Document document) {

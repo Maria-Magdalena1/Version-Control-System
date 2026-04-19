@@ -37,9 +37,9 @@ public class UserService implements UserDetailsService {
     }
 
     private User getUserByUsername(String username) {
-        User user = userRepository.findByUsername(username)
+        return userRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-        return user;
+
     }
 
     private User getUserById(UUID userId) {
@@ -69,10 +69,10 @@ public class UserService implements UserDetailsService {
         if (emailExists(userDto.getEmail())) {
             throw new EntityAlreadyExistsException("Email already exists");
         }
-//
-//        if (!userDto.getPassword().equals(userDto.getConfirmPassword())) {
-//            throw new PasswordsDoNotMatchException("Passwords do not match");
-//        }
+
+        if (!userDto.getPassword().equals(userDto.getConfirmPassword())) {
+            throw new PasswordsDoNotMatchException("Passwords do not match");
+        }
 
         User user = User.builder()
                 .username(userDto.getUsername())
@@ -92,6 +92,7 @@ public class UserService implements UserDetailsService {
 
     public String login(String username, String password) {
         User user = getUserByUsername(username);
+
         if (!user.isActive()) {
             throw new DisabledException("User is disabled");
         }
@@ -146,8 +147,8 @@ public class UserService implements UserDetailsService {
         User admin = getUserById(adminId);
 
         if (!user.isActive()) {
-            System.out.println("User is already deactivated");
             auditLogService.createLogForUser(admin, "USER ALREADY DEACTIVATED", user, "User deactivated");
+            throw new IllegalStateException("User is already deactivated");
         } else {
             user.setActive(false);
             user.setUpdatedBy(adminId);
@@ -164,8 +165,8 @@ public class UserService implements UserDetailsService {
         User admin = getUserById(adminId);
 
         if (user.isActive()) {
-            System.out.println("User is already activated");
             auditLogService.createLogForUser(admin, "USER ALREADY ACTIVATED", user, "User activated");
+            throw new IllegalStateException("User is already activated");
         } else {
             user.setActive(true);
             user.setUpdatedBy(adminId);

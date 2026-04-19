@@ -48,6 +48,7 @@ public class DocumentVersion {
     private User createdBy;
 
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_version_id")

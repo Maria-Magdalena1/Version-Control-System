@@ -16,4 +16,6 @@ public interface DocumentVersionRepository extends JpaRepository<DocumentVersion
     Optional<DocumentVersion> findDocumentVersionByDocument_DocumentIdAndIsActiveIsTrue(UUID documentId);
 
     List<DocumentVersion> findAllByDocument_DocumentIdOrderByCreatedAtAsc(UUID documentDocumentId);
+
+    List<DocumentVersion> findAllByDocument_DocumentIdAndStatusOrderByCreatedAtAsc(UUID documentId, VersionStatus versionStatus);
 }

@@ -1,9 +1,11 @@
 package main.services;
 
+import jakarta.transaction.Transactional;
 import main.entities.Document;
 import main.entities.DocumentVersion;
 import main.entities.VersionStatus;
 import main.exceptions.ApprovedVersionNotFoundException;
+import main.exceptions.VersionNotFoundException;
 import main.repositories.DocumentVersionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@Transactional
 public class DocumentVersionService {
 
     private final DocumentVersionRepository documentVersionRepository;
@@ -46,7 +49,7 @@ public class DocumentVersionService {
         return newVersion;
     }
 
-    public DocumentVersion findActiveDocumentVersionByDocumentIdAndStatus(UUID documentId) {
+    public DocumentVersion findActiveDocumentVersionByDocumentId(UUID documentId) {
         return documentVersionRepository.findTopByDocument_DocumentIdAndStatusOrderByCreatedAtDesc(documentId, VersionStatus.APPROVED)
                 .orElseThrow(() -> new ApprovedVersionNotFoundException("No approved version found for this document"));
     }
@@ -57,6 +60,6 @@ public class DocumentVersionService {
 
     public DocumentVersion findById(UUID versionId) {
         return documentVersionRepository.findById(versionId)
-                .orElseThrow(() -> new RuntimeException("Version not found"));
+                .orElseThrow(() -> new VersionNotFoundException("Version not found"));
     }
 }

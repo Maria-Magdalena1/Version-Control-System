@@ -73,6 +73,12 @@ public class DocumentVersionService {
         if (parent != null) {
             parent.setActive(true);
             saveVersion(parent);
+        } else {
+            throw new IllegalStateException(
+                    "Cannot rollback version " + version.getVersionNumber() +
+                            " — it is the first version and has no previous version to restore."
+                    //log
+            );
         }
     }
 

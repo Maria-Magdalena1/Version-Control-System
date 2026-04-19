@@ -114,36 +114,6 @@ public class DocumentService {
                 version.getDocument(), version, file, "Version " + version.getVersionNumber() + " submitted for review");
     }
 
-    @PreAuthorize("hasRole('REVIEWER')")
-    public void approveVersion(UUID versionId, User reviewer) {
-        DocumentVersion version = documentVersionService.findById(versionId);
-
-        if (version.getStatus() != VersionStatus.PENDING) {
-            throw new InvalidVersionStatusException("Only pending versions can be approved");
-        }
-
-        version.setStatus(VersionStatus.APPROVED);
-        documentVersionService.activateVersion(version);
-        auditLogService.createLogForDocument(reviewer, "APPROVE VERSION", version.getDocument(),
-                version, file, String.format("Version %s approved by %s.", version.getVersionNumber(), reviewer));
-    }
-
-    @PreAuthorize("hasRole('REVIEWER')")
-    public void rejectVersion(UUID versionId, User reviewer, String reason) {
-        DocumentVersion version = documentVersionService.findById(versionId);
-
-        if (version.getStatus() != VersionStatus.PENDING) {
-            throw new InvalidVersionStatusException("Only pending versions can be rejected");
-        }
-
-        version.setStatus(VersionStatus.REJECTED);
-        version.setComment(reason);
-        documentVersionService.rollbackToPreviousVersion(version);
-
-        auditLogService.createLogForDocument(reviewer, "REJECT VERSION", version.getDocument(),
-                version, file, String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer, reason));
-    }
-
     @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
     public List<DocumentVersion> getVersionHistory(UUID documentId) {
         documentRepository.findById(documentId)

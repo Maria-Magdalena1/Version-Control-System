@@ -1,5 +1,6 @@
 package main.services;
 
+import jakarta.transaction.Transactional;
 import main.entities.*;
 import main.repositories.AuditLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
 @Service
+@Transactional
 public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;

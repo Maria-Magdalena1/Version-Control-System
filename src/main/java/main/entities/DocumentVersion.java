@@ -53,6 +53,9 @@ public class DocumentVersion {
     @JoinColumn(name = "parent_version_id")
     private DocumentVersion parentVersion;
 
+    @Column(name = "comment")
+    private String comment;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive;
 }

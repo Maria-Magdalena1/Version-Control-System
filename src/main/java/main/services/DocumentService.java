@@ -2,6 +2,10 @@ package main.services;
 
 import jakarta.transaction.Transactional;
 import main.entities.*;
+import main.exceptions.ActiveVersionNotFoundException;
+import main.exceptions.DocumentNotFoundException;
+import main.exceptions.InvalidVersionStatusException;
+import main.exceptions.UnauthorizedException;
 import main.repositories.DocumentRepository;
 import main.web.DocumentDTO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +55,8 @@ public class DocumentService {
     @PreAuthorize("hasRole('AUTHOR')")
     public void createNewVersion(UUID documentId, String changeType, String content) {
         DocumentVersion lastVersion = documentVersionService
-                .findActiveDocumentVersionByDocumentIdAndStatus(documentId);
+                .findDocumentVersionByDocumentIdAndIsActiveIsTrue(documentId)
+                .orElseThrow(()-> new ActiveVersionNotFoundException("No active version found"));
 
         int major = lastVersion.getVersionMajor();
         int minor = lastVersion.getVersionMinor();
@@ -75,7 +80,7 @@ public class DocumentService {
         String newVersionNumber = String.format("%d.%d.%d", major, minor, patch);
 
         Document document = documentRepository.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("Document not found"));
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
 
         DocumentVersion newVersion = documentVersionService.createDocumentVersion(document, lastVersion, major, minor, patch, newVersionNumber, content);
 
@@ -88,18 +93,48 @@ public class DocumentService {
         DocumentVersion version = documentVersionService.findById(versionId);
 
         if (!version.getCreatedBy().getUserId().equals(author.getUserId())) {
-            throw new RuntimeException("You are not the author of this document");
+            throw new UnauthorizedException("You are not the author of this document");
         }
 
         if (version.getStatus() != VersionStatus.DRAFT) {
-            throw new RuntimeException("Only draft versions can be submitted for review");
+            throw new InvalidVersionStatusException("Only draft versions can be submitted for review");
         }
 
         version.setStatus(VersionStatus.PENDING);
         documentVersionService.saveVersion(version);
 
         auditLogService.createLogForDocument(author, "SUBMIT FOR REVIEW",
-                version.getDocument(), version, file, "Version " + version.getVersionNumber() + "submitted for review");
+                version.getDocument(), version, file, "Version " + version.getVersionNumber() + " submitted for review");
+    }
+
+    @PreAuthorize("hasRole('REVIEWER')")
+    public void approveVersion(UUID versionId, User reviewer) {
+        DocumentVersion version=documentVersionService.findById(versionId);
+
+        if (version.getStatus() != VersionStatus.PENDING) {
+            throw new InvalidVersionStatusException("Only pending versions can be approved");
+        }
+
+        version.setStatus(VersionStatus.APPROVED);
+        documentVersionService.activateVersion(version);
+        auditLogService.createLogForDocument(reviewer,"APPROVE VERSION",version.getDocument(),
+               version,file,String.format("Version %s approved by %s.", version.getVersionNumber(), reviewer));
+    }
+
+    @PreAuthorize("hasRole('REVIEWER')")
+    public void rejectVersion(UUID versionId, User reviewer, String reason) {
+        DocumentVersion version=documentVersionService.findById(versionId);
+
+        if (version.getStatus() != VersionStatus.PENDING) {
+            throw new InvalidVersionStatusException("Only pending versions can be rejected");
+        }
+
+        version.setStatus(VersionStatus.REJECTED);
+        version.setComment(reason);
+        documentVersionService.rollbackToPreviousVersion(version);
+
+        auditLogService.createLogForDocument(reviewer,"REJECT VERSION",version.getDocument(),
+                version,file,String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer,reason));
     }
 
     public void saveDocument(Document document) {

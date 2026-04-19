@@ -49,7 +49,30 @@ public class DocumentVersionService {
         return newVersion;
     }
 
-    public DocumentVersion findActiveDocumentVersionByDocumentId(UUID documentId) {
+    public void activateVersion(DocumentVersion version) {
+        documentVersionRepository
+                .findDocumentVersionByDocument_DocumentIdAndIsActiveIsTrue(version.getDocument().getDocumentId())
+                .ifPresent(current -> {
+                    current.setActive(false);
+                    saveVersion(current);
+                });
+        version.setActive(true);
+        saveVersion(version);
+
+    }
+
+    public void rollbackToPreviousVersion(DocumentVersion version) {
+        version.setActive(false);
+        saveVersion(version);
+
+        DocumentVersion parent = version.getParentVersion();
+        if (parent != null) {
+            parent.setActive(true);
+            saveVersion(parent);
+        }
+    }
+
+    public DocumentVersion findLatestApprovedVersionByDocumentId(UUID documentId) {
         return documentVersionRepository.findTopByDocument_DocumentIdAndStatusOrderByCreatedAtDesc(documentId, VersionStatus.APPROVED)
                 .orElseThrow(() -> new ApprovedVersionNotFoundException("No approved version found for this document"));
     }

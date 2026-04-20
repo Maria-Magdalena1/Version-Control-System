@@ -52,7 +52,7 @@ public class UserService implements UserDetailsService {
     }
 
     private boolean emailExists(String email) {
-        return userRepository.findByEmail(email);
+        return userRepository.findByEmail(email).isPresent();
     }
 
     private void saveUser(User user) {
@@ -175,6 +175,10 @@ public class UserService implements UserDetailsService {
 
             auditLogService.createLogForUser(admin, "ACTIVATE USER", user, "Activate user " + user.getUsername());
         }
+    }
+
+    public User findByUsername(String username) {
+        return getUserByUsername(username);
     }
 
     @Override

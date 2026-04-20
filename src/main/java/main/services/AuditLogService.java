@@ -44,7 +44,7 @@ public class AuditLogService {
         saveLog(log);
     }
 
-    public void saveLog(AuditLog auditLog) {
+    private void saveLog(AuditLog auditLog) {
         auditLogRepository.save(auditLog);
     }
 }

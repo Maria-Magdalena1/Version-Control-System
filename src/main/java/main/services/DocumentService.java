@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -29,15 +30,14 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentVersionService documentVersionService;
     private final AuditLogService auditLogService;
-
-    //slojila sum go prosto da ne dava greshki zashtoto oshte ne sum dobavila kod za file
-    DocumentFile file;
+    private final DocumentFileService documentFileService;
 
     @Autowired
-    public DocumentService(DocumentRepository documentRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService) {
+    public DocumentService(DocumentRepository documentRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService, DocumentFileService documentFileService) {
         this.documentRepository = documentRepository;
         this.documentVersionService = documentVersionService;
         this.auditLogService = auditLogService;
+        this.documentFileService = documentFileService;
     }
 
     @PreAuthorize("hasRole('AUTHOR')")
@@ -55,45 +55,55 @@ public class DocumentService {
         DocumentVersion version = documentVersionService.createDocumentVersion(document, null, 1, 0, 0, "1.0.0",
                 dto.getContent());
 
-        auditLogService.createLogForDocument(author, "CREATE DOCUMENT",
-                document, version, file, String.format("Created document by %s with version %s", author, version));
-    }
-
-    @PreAuthorize("hasRole('AUTHOR')")
-    public void createNewVersion(UUID documentId, String changeType, String content) {
-        DocumentVersion lastVersion = documentVersionService
-                .findDocumentVersionByDocumentIdAndIsActiveIsTrue(documentId)
-                .orElseThrow(() -> new ActiveVersionNotFoundException("No active version found"));
-
-        int major = lastVersion.getVersionMajor();
-        int minor = lastVersion.getVersionMinor();
-        int patch = lastVersion.getVersionPatch();
-
-        switch (changeType) {
-            case "major":
-                major++;
-                minor = 0;
-                patch = 0;
-                break;
-            case "minor":
-                minor++;
-                patch = 0;
-                break;
-            case "patch":
-                patch++;
-                break;
+        DocumentFile uploadedFile = null;
+        if (dto.getFilePath() != null && !dto.getFilePath().isBlank()) {
+            uploadedFile = documentFileService.uploadFile(dto.getFilePath(), document, version, author);
         }
 
-        String newVersionNumber = String.format("%d.%d.%d", major, minor, patch);
-
-        Document document = documentRepository.findById(documentId)
-                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
-
-        DocumentVersion newVersion = documentVersionService.createDocumentVersion(document, lastVersion, major, minor, patch, newVersionNumber, content);
-
-        auditLogService.createLogForDocument(document.getCreatedBy(), "CREATE NEW VERSION",
-                document, newVersion, file, "Create new version of document");
+        auditLogService.createLogForDocument(author, "CREATE DOCUMENT",
+                document, version,uploadedFile, String.format("Created document by %s with version %s", author.getUsername(), version.getVersionNumber()));
     }
+
+//    @PreAuthorize("hasRole('AUTHOR')")
+//    public void createNewVersion(UUID documentId, String changeType, String content,String filePath) {
+//        DocumentVersion lastVersion = documentVersionService
+//                .findDocumentVersionByDocumentIdAndIsActiveIsTrue(documentId)
+//                .orElseThrow(() -> new ActiveVersionNotFoundException("No active version found"));
+//
+//        int major = lastVersion.getVersionMajor();
+//        int minor = lastVersion.getVersionMinor();
+//        int patch = lastVersion.getVersionPatch();
+//
+//        switch (changeType) {
+//            case "major":
+//                major++;
+//                minor = 0;
+//                patch = 0;
+//                break;
+//            case "minor":
+//                minor++;
+//                patch = 0;
+//                break;
+//            case "patch":
+//                patch++;
+//                break;
+//        }
+//
+//        String newVersionNumber = String.format("%d.%d.%d", major, minor, patch);
+//
+//        Document document = documentRepository.findById(documentId)
+//                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
+//
+//        DocumentVersion newVersion = documentVersionService.createDocumentVersion(document, lastVersion, major, minor, patch, newVersionNumber, content);
+//
+//        DocumentFile uploadedFile = null;
+//        if (filePath != null && !filePath.isBlank()) {
+//            uploadedFile = documentFileService.uploadFile(filePath, document, newVersion, document.getCreatedBy());
+//        }
+//
+//        auditLogService.createLogForDocument(document.getCreatedBy(), "CREATE NEW VERSION",
+//                document, newVersion, uploadedFile, "Create new version of document");
+//    }
 
     @PreAuthorize("hasRole('AUTHOR')")
     public void submitForReview(UUID versionId, User author) {
@@ -111,7 +121,7 @@ public class DocumentService {
         documentVersionService.saveVersion(version);
 
         auditLogService.createLogForDocument(author, "SUBMIT FOR REVIEW",
-                version.getDocument(), version, file, "Version " + version.getVersionNumber() + " submitted for review");
+                version.getDocument(), version, null, "Version " + version.getVersionNumber() + " submitted for review");
     }
 
     @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
@@ -165,7 +175,7 @@ public class DocumentService {
                     "EXPORT TO PDF",
                     activeVersion.getDocument(),
                     activeVersion,
-                    file,
+                    null,
                     String.format("Document %s exported to PDF", activeVersion.getDocument().getTitle())
             );
 
@@ -178,5 +188,9 @@ public class DocumentService {
 
     public void saveDocument(Document document) {
         documentRepository.save(document);
+    }
+
+    public Optional<Document> findById(UUID documentId) {
+        return documentRepository.findById(documentId);
     }
 }

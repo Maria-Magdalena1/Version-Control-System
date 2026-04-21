@@ -1,5 +1,8 @@
 package main.entities;
 
+import lombok.Getter;
+
+@Getter
 public enum VersionStatus {
     DRAFT("Draft"),
     PENDING("Pending"),
@@ -7,10 +10,6 @@ public enum VersionStatus {
     REJECTED("Rejected");
 
     private final String displayValue;
-
-    public String getDisplayValue() {
-        return displayValue;
-    }
 
     VersionStatus(String displayValue) {
         this.displayValue = displayValue;

@@ -4,6 +4,7 @@ import jakarta.transaction.Transactional;
 import main.entities.*;
 import main.exceptions.InvalidVersionStatusException;
 import main.repositories.ApprovalRepository;
+import main.repositories.DocumentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -18,17 +19,15 @@ public class ApprovalService {
     private final ApprovalRepository approvalRepository;
     private final DocumentVersionService documentVersionService;
     private final AuditLogService auditLogService;
-    private final DocumentService documentService;
-
-    //slojila sum go prosto da ne dava greshki zashtoto oshte ne sum dobavila kod za file
-    DocumentFile file;
+    private final DocumentRepository documentRepository;
+    //private final DocumentService documentService;
 
     @Autowired
-    public ApprovalService(ApprovalRepository approvalRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService, DocumentService documentService) {
+    public ApprovalService(ApprovalRepository approvalRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService, DocumentRepository documentRepository) {
         this.approvalRepository = approvalRepository;
         this.documentVersionService = documentVersionService;
         this.auditLogService = auditLogService;
-        this.documentService = documentService;
+        this.documentRepository = documentRepository;
     }
 
     @PreAuthorize("hasRole('REVIEWER')")
@@ -42,9 +41,9 @@ public class ApprovalService {
         Approval approval = createApproval(isApproved, comment, reviewer, version);
         saveApproval(approval);
         if (isApproved) {
-            approveVersion(versionId,reviewer);
+            approveVersion(version, reviewer);
         } else {
-            rejectVersion(versionId,reviewer,comment);
+            rejectVersion(version, reviewer, comment);
         }
     }
 
@@ -59,40 +58,29 @@ public class ApprovalService {
     }
 
     @PreAuthorize("hasRole('REVIEWER')")
-    public void approveVersion(UUID versionId, User reviewer) {
-        DocumentVersion version = documentVersionService.findById(versionId);
-
-        if (version.getStatus() != VersionStatus.PENDING) {
-            throw new InvalidVersionStatusException("Only pending versions can be approved");
-        }
-
+    public void approveVersion(DocumentVersion version, User reviewer) {
         version.setStatus(VersionStatus.APPROVED);
-        documentVersionService.activateVersion(version);
+        documentVersionService.activateVersion(version, reviewer);
 
         version.getDocument().setUpdatedAt(LocalDateTime.now());
-        documentService.saveDocument(version.getDocument());
+        documentRepository.save(version.getDocument());
 
         auditLogService.createLogForDocument(reviewer, "APPROVE VERSION", version.getDocument(),
-                version, file, String.format("Version %s approved by %s.", version.getVersionNumber(), reviewer));
+                version, null, String.format("Version %s approved by %s.", version.getVersionNumber(), reviewer.getUsername()));
     }
 
     @PreAuthorize("hasRole('REVIEWER')")
-    public void rejectVersion(UUID versionId, User reviewer, String reason) {
-        DocumentVersion version = documentVersionService.findById(versionId);
-
-        if (version.getStatus() != VersionStatus.PENDING) {
-            throw new InvalidVersionStatusException("Only pending versions can be rejected");
-        }
+    public void rejectVersion(DocumentVersion version, User reviewer, String reason) {
 
         version.setStatus(VersionStatus.REJECTED);
         version.setComment(reason);
-        documentVersionService.rollbackToPreviousVersion(version);
+        documentVersionService.rollbackToPreviousVersion(version, reviewer);
 
         version.getDocument().setUpdatedAt(LocalDateTime.now());
-        documentService.saveDocument(version.getDocument());
+        documentRepository.save(version.getDocument());
 
         auditLogService.createLogForDocument(reviewer, "REJECT VERSION", version.getDocument(),
-                version, file, String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer, reason));
+                version, null, String.format("Version %s rejected by %s. Reason: %s", version.getVersionNumber(), reviewer.getUsername(), reason));
     }
 
     private void saveApproval(Approval approval) {

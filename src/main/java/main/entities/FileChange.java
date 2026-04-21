@@ -28,8 +28,6 @@ public class FileChange {
     @Column(name = "change_type", nullable = false)
     private ChangeType changeType;
 
-    private String oldFileName;
-
     private String changeSummary;
 
     @ManyToOne(fetch = FetchType.LAZY)

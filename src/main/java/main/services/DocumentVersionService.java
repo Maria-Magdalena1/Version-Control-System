@@ -1,14 +1,13 @@
 package main.services;
 
 import jakarta.transaction.Transactional;
-import main.entities.Document;
-import main.entities.DocumentVersion;
-import main.entities.VersionStatus;
-import main.exceptions.ApprovedVersionNotFoundException;
+import main.entities.*;
+import main.exceptions.ActiveVersionNotFoundException;
 import main.exceptions.VersionNotFoundException;
 import main.repositories.DocumentVersionRepository;
 import main.web.VersionComparisonResult;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,10 +22,14 @@ import java.util.stream.Collectors;
 public class DocumentVersionService {
 
     private final DocumentVersionRepository documentVersionRepository;
+    private final DocumentFileService documentFileService;
+    private final AuditLogService auditLogService;
 
     @Autowired
-    public DocumentVersionService(DocumentVersionRepository documentVersionRepository) {
+    public DocumentVersionService(DocumentVersionRepository documentVersionRepository, DocumentFileService documentFileService, AuditLogService auditLogService) {
         this.documentVersionRepository = documentVersionRepository;
+        this.documentFileService = documentFileService;
+        this.auditLogService = auditLogService;
     }
 
     public void saveVersion(DocumentVersion version) {
@@ -50,10 +53,49 @@ public class DocumentVersionService {
                 .isActive(false)
                 .build();
         saveVersion(newVersion);
+        auditLogService.createLogForDocument(document.getCreatedBy(), "CREATE DOCUMENT VERSION", document,
+                newVersion, null, String.format("Created document version by %s", document.getCreatedBy().getUsername()));
         return newVersion;
     }
 
-    public void activateVersion(DocumentVersion version) {
+    @PreAuthorize("hasRole('AUTHOR')")
+    public void createNewVersion(Document document, String changeType, String content, String filePath) {
+        DocumentVersion lastVersion = findDocumentVersionByDocumentIdAndIsActiveIsTrue(document.getDocumentId())
+                .orElseThrow(() -> new ActiveVersionNotFoundException("No active version found"));
+
+        int major = lastVersion.getVersionMajor();
+        int minor = lastVersion.getVersionMinor();
+        int patch = lastVersion.getVersionPatch();
+
+        switch (changeType) {
+            case "major":
+                major++;
+                minor = 0;
+                patch = 0;
+                break;
+            case "minor":
+                minor++;
+                patch = 0;
+                break;
+            case "patch":
+                patch++;
+                break;
+        }
+
+        String newVersionNumber = String.format("%d.%d.%d", major, minor, patch);
+
+        DocumentVersion newVersion = createDocumentVersion(document, lastVersion, major, minor, patch, newVersionNumber, content);
+
+        DocumentFile uploadedFile = null;
+        if (filePath != null && !filePath.isBlank()) {
+            uploadedFile = documentFileService.uploadFile(filePath, document, newVersion, document.getCreatedBy());
+        }
+
+        auditLogService.createLogForDocument(document.getCreatedBy(), "CREATE NEW VERSION",
+                document, newVersion, uploadedFile, "Create new version of document");
+    }
+
+    public void activateVersion(DocumentVersion version, User reviewer) {
         documentVersionRepository
                 .findDocumentVersionByDocument_DocumentIdAndIsActiveIsTrue(version.getDocument().getDocumentId())
                 .ifPresent(current -> {
@@ -62,10 +104,11 @@ public class DocumentVersionService {
                 });
         version.setActive(true);
         saveVersion(version);
-
+        auditLogService.createLogForDocumentVersion(reviewer, "ACTIVATE VERSION", version.getDocument(), version,
+                "Activate new version of document");
     }
 
-    public void rollbackToPreviousVersion(DocumentVersion version) {
+    public void rollbackToPreviousVersion(DocumentVersion version, User reviewer) {
         version.setActive(false);
         saveVersion(version);
 
@@ -74,29 +117,30 @@ public class DocumentVersionService {
             parent.setActive(true);
             saveVersion(parent);
         } else {
-            throw new IllegalStateException(
-                    "Cannot rollback version " + version.getVersionNumber() +
-                            " — it is the first version and has no previous version to restore."
-                    //log
-            );
+            version.setStatus(VersionStatus.DRAFT);
+            version.setActive(true);
+            saveVersion(version);
+            auditLogService.createLogForDocumentVersion(reviewer, "ROLLBACK TO DRAFT",
+                    version.getDocument(), version, "First version rejected, returned to draft.");
         }
     }
 
     public VersionComparisonResult compareVersions(UUID version1, UUID version2) {
-        DocumentVersion v1 =findById(version1);
-        DocumentVersion v2 =findById(version2);
+        DocumentVersion v1 = findById(version1);
+        DocumentVersion v2 = findById(version2);
 
         List<String> lines1 = Arrays.asList(v1.getContent().split("\n"));
         List<String> lines2 = Arrays.asList(v2.getContent().split("\n"));
 
-        List<String> addedLines =lines2.stream()
-                .filter(line->!lines1.contains(line))
+        List<String> addedLines = lines2.stream()
+                .filter(line -> !lines1.contains(line))
                 .collect(Collectors.toList());
 
-        List<String> removedLines =lines1.stream()
-                .filter(line->!lines2.contains(line))
+        List<String> removedLines = lines1.stream()
+                .filter(line -> !lines2.contains(line))
                 .collect(Collectors.toList());
 
+        //auditLogService.createLogForDocumentVersion("COMPARE VERSIONS", v2.getDocument(), null, "Compare versions of document");
         return VersionComparisonResult.builder()
                 .versionNumber1(v1.getVersionNumber())
                 .author1(v1.getCreatedBy().getUsername())
@@ -109,10 +153,6 @@ public class DocumentVersionService {
                 .addedLines(addedLines)
                 .removedLines(removedLines)
                 .build();
-    }
-    public DocumentVersion findLatestApprovedVersionByDocumentId(UUID documentId) {
-        return documentVersionRepository.findTopByDocument_DocumentIdAndStatusOrderByCreatedAtDesc(documentId, VersionStatus.APPROVED)
-                .orElseThrow(() -> new ApprovedVersionNotFoundException("No approved version found for this document"));
     }
 
     public Optional<DocumentVersion> findDocumentVersionByDocumentIdAndIsActiveIsTrue(UUID documentId) {
@@ -132,4 +172,5 @@ public class DocumentVersionService {
         return documentVersionRepository
                 .findAllByDocument_DocumentIdAndStatusOrderByCreatedAtAsc(documentId, VersionStatus.APPROVED);
     }
+
 }

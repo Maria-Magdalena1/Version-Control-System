@@ -6,10 +6,15 @@ import main.entities.User;
 import main.exceptions.*;
 import main.repositories.UserRepository;
 import main.web.UserDTO;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -17,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -62,6 +68,18 @@ public class UserService implements UserDetailsService {
 
     public void register(UserDTO userDto) {
 
+        if (userDto.getUsername().length() < 3 || userDto.getUsername().length() > 20) {
+            throw new IllegalArgumentException("Username must be between 3 and 20 characters");
+        }
+
+        if (userDto.getPassword().length() < 6) {
+            throw new IllegalArgumentException("Password must be at least 6 characters");
+        }
+
+        if (!userDto.getEmail().contains("@")) {
+            throw new IllegalArgumentException("Invalid email");
+        }
+
         if (usernameExists(userDto.getUsername())) {
             throw new EntityAlreadyExistsException("Username already exists");
         }
@@ -90,7 +108,7 @@ public class UserService implements UserDetailsService {
                 "Registered User: " + userDto.getUsername());
     }
 
-    public String login(String username, String password) {
+    public void login(String username, String password) {
         User user = getUserByUsername(username);
 
         if (!user.isActive()) {
@@ -100,20 +118,30 @@ public class UserService implements UserDetailsService {
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        auditLogService.createLogForUser(user, "USER LOGGED IN", user, "Login User: " + username);
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                user.getUsername(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+        );
 
-        return "Welcome";
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        auditLogService.createLogForUser(user, "USER LOGGED IN", user, "Login User: " + username);
     }
 
     @PreAuthorize("hasRole('ADMINISTRATOR')")
-    public void changeUserRole(UUID userId, Role newRole, UUID adminId) {
+    public void changeUserRole(UUID userId, Role newRole) {
         User user = getUserById(userId);
-        User admin = getUserById(adminId);
+        //User admin = getUserById(adminId);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String adminUsername = auth.getName();
+
+        User admin = getUserByUsername(adminUsername);
 
         Role oldRole = user.getRole();
 
         user.setRole(newRole);
-        user.setUpdatedBy(adminId);
+        user.setUpdatedBy(admin.getUserId());
         user.setUpdatedAt(LocalDateTime.now());
 
         saveUser(user);
@@ -181,6 +209,7 @@ public class UserService implements UserDetailsService {
         return getUserByUsername(username);
     }
 
+    @NullMarked
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = getUserByUsername(username);

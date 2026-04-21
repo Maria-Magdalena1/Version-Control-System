@@ -1,8 +1,8 @@
 package main.services;
 
+import jakarta.transaction.Transactional;
 import main.entities.*;
 import main.repositories.DocumentFileRepository;
-import main.repositories.FileChangeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,16 +15,19 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Transactional
 @Service
 public class DocumentFileService {
 
     private final DocumentFileRepository documentFileRepository;
-    private final FileChangeRepository fileChangeRepository;
+    private final FileChangeService fileChangeService;
+    private final AuditLogService auditLogService;
 
     @Autowired
-    public DocumentFileService(DocumentFileRepository documentFileRepository, FileChangeRepository fileChangeRepository) {
+    public DocumentFileService(DocumentFileRepository documentFileRepository, FileChangeService fileChangeService, AuditLogService auditLogService) {
         this.documentFileRepository = documentFileRepository;
-        this.fileChangeRepository = fileChangeRepository;
+        this.fileChangeService = fileChangeService;
+        this.auditLogService = auditLogService;
     }
 
     public DocumentFile uploadFile(String sourcePath, Document document,
@@ -55,8 +58,10 @@ public class DocumentFileService {
             documentFileRepository.save(documentFile);
 
             saveFileChange(version, documentFile, ChangeType.ADDED,
-                    null, "File uploaded: " + fileName, uploadedBy);
+                    "File uploaded: " + fileName, uploadedBy);
 
+            auditLogService.createLogForDocumentFile(uploadedBy, "UPLOAD DOCUMENT FILE", document,
+                    version, documentFile, String.format("Uploaded file with name %s by %s", fileName, uploadedBy.getUsername()));
             return documentFile;
 
         } catch (IOException e) {
@@ -65,36 +70,39 @@ public class DocumentFileService {
     }
 
     public void deleteFile(UUID fileId, DocumentVersion version, User deletedBy) {
-        DocumentFile file = documentFileRepository.findById(fileId)
-                .orElseThrow(() -> new IllegalArgumentException("File not found"));
-
-        if (file.isDeleted()) {
-            throw new IllegalStateException("File is already deleted");
-        }
+        DocumentFile file = documentFileRepository
+                .findByFileIdAndDocument_DocumentIdAndIsDeletedFalse(
+                        fileId,
+                        version.getDocument().getDocumentId()
+                )
+                .orElseThrow(() -> new IllegalArgumentException("File not found for this document"));
 
         file.setDeleted(true);
         documentFileRepository.save(file);
 
         saveFileChange(version, file, ChangeType.DELETED,
-                null, "File deleted: " + file.getFileName(), deletedBy);
+                "File deleted: " + file.getFileName(), deletedBy);
+        auditLogService.createLogForDocumentFile(deletedBy, "DELETE DOCUMENT FILE", version.getDocument(),
+                version, file, String.format("Deleted file by %s", deletedBy.getUsername()));
     }
 
     public List<DocumentFile> getFilesByDocument(UUID documentId) {
-        return documentFileRepository.findByDocument_DocumentIdAndIsDeletedFalse(documentId);
+        return documentFileRepository.findFilesByDocumentWithUser(documentId);
     }
 
     private void saveFileChange(DocumentVersion version, DocumentFile file,
-                                ChangeType changeType, String oldFileName,
+                                ChangeType changeType,
                                 String changeSummary, User changedBy) {
         FileChange fileChange = new FileChange();
         fileChange.setDocumentVersion(version);
         fileChange.setFile(file);
         fileChange.setChangeType(changeType);
-        fileChange.setOldFileName(oldFileName);
         fileChange.setChangeSummary(changeSummary);
         fileChange.setChangedBy(changedBy);
         fileChange.setChangedAt(LocalDateTime.now());
-        fileChangeRepository.save(fileChange);
+        fileChangeService.saveFile(fileChange);
+        auditLogService.createLogForDocumentFile(changedBy, "CHANGE DOCUMENT FILE", version.getDocument(),
+                version, file, String.format("Changed file by %s", changedBy.getUsername()));
     }
 
 }

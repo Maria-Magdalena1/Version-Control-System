@@ -20,7 +20,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -42,6 +41,9 @@ public class DocumentService {
 
     @PreAuthorize("hasRole('AUTHOR')")
     public void create(DocumentDTO dto, User author) {
+        if (dto.getTitle().length() < 3) {
+            throw new IllegalArgumentException("Invalid title");
+        }
         Document document = Document.builder()
                 .title(dto.getTitle())
                 .description(dto.getDescription())
@@ -61,49 +63,8 @@ public class DocumentService {
         }
 
         auditLogService.createLogForDocument(author, "CREATE DOCUMENT",
-                document, version,uploadedFile, String.format("Created document by %s with version %s", author.getUsername(), version.getVersionNumber()));
+                document, version, uploadedFile, String.format("Created document by %s with version %s", author.getUsername(), version.getVersionNumber()));
     }
-
-//    @PreAuthorize("hasRole('AUTHOR')")
-//    public void createNewVersion(UUID documentId, String changeType, String content,String filePath) {
-//        DocumentVersion lastVersion = documentVersionService
-//                .findDocumentVersionByDocumentIdAndIsActiveIsTrue(documentId)
-//                .orElseThrow(() -> new ActiveVersionNotFoundException("No active version found"));
-//
-//        int major = lastVersion.getVersionMajor();
-//        int minor = lastVersion.getVersionMinor();
-//        int patch = lastVersion.getVersionPatch();
-//
-//        switch (changeType) {
-//            case "major":
-//                major++;
-//                minor = 0;
-//                patch = 0;
-//                break;
-//            case "minor":
-//                minor++;
-//                patch = 0;
-//                break;
-//            case "patch":
-//                patch++;
-//                break;
-//        }
-//
-//        String newVersionNumber = String.format("%d.%d.%d", major, minor, patch);
-//
-//        Document document = documentRepository.findById(documentId)
-//                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
-//
-//        DocumentVersion newVersion = documentVersionService.createDocumentVersion(document, lastVersion, major, minor, patch, newVersionNumber, content);
-//
-//        DocumentFile uploadedFile = null;
-//        if (filePath != null && !filePath.isBlank()) {
-//            uploadedFile = documentFileService.uploadFile(filePath, document, newVersion, document.getCreatedBy());
-//        }
-//
-//        auditLogService.createLogForDocument(document.getCreatedBy(), "CREATE NEW VERSION",
-//                document, newVersion, uploadedFile, "Create new version of document");
-//    }
 
     @PreAuthorize("hasRole('AUTHOR')")
     public void submitForReview(UUID versionId, User author) {
@@ -124,6 +85,15 @@ public class DocumentService {
                 version.getDocument(), version, null, "Version " + version.getVersionNumber() + " submitted for review");
     }
 
+    @PreAuthorize("hasRole('AUTHOR')")
+    public void createNewVersion(UUID documentId, String changeType, String content, String filePath) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
+
+        documentVersionService.createNewVersion(document, changeType, content, filePath);
+    }
+
+    @Transactional
     @PreAuthorize("hasAnyRole('AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
     public List<DocumentVersion> getVersionHistory(UUID documentId) {
         documentRepository.findById(documentId)
@@ -188,9 +158,5 @@ public class DocumentService {
 
     public void saveDocument(Document document) {
         documentRepository.save(document);
-    }
-
-    public Optional<Document> findById(UUID documentId) {
-        return documentRepository.findById(documentId);
     }
 }

@@ -44,6 +44,31 @@ public class AuditLogService {
         saveLog(log);
     }
 
+    public void createLogForDocumentFile(User user, String action, Document document, DocumentVersion documentVersion, DocumentFile file, String details) {
+        AuditLog log = AuditLog.builder()
+                .user(user)
+                .action(action)
+                .document(document)
+                .version(documentVersion)
+                .file(file)
+                .details(details)
+                .performedAt(LocalDateTime.now())
+                .build();
+        saveLog(log);
+    }
+
+    public void createLogForDocumentVersion(User reviewer, String action, Document document, DocumentVersion documentVersion, String details) {
+        AuditLog log = AuditLog.builder()
+                .user(reviewer)
+                .action(action)
+                .document(document)
+                .version(documentVersion)
+                .details(details)
+                .performedAt(LocalDateTime.now())
+                .build();
+        saveLog(log);
+    }
+
     private void saveLog(AuditLog auditLog) {
         auditLogRepository.save(auditLog);
     }

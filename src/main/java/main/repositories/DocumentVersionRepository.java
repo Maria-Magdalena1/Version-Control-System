@@ -11,8 +11,6 @@ import java.util.UUID;
 
 @Repository
 public interface DocumentVersionRepository extends JpaRepository<DocumentVersion, UUID> {
-    Optional<DocumentVersion> findTopByDocument_DocumentIdAndStatusOrderByCreatedAtDesc(UUID documentId, VersionStatus versionStatus);
-
     Optional<DocumentVersion> findDocumentVersionByDocument_DocumentIdAndIsActiveIsTrue(UUID documentId);
 
     List<DocumentVersion> findAllByDocument_DocumentIdOrderByCreatedAtAsc(UUID documentDocumentId);

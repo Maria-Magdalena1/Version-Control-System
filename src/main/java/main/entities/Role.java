@@ -7,7 +7,8 @@ public enum Role {
     AUTHOR("Author"),
     REVIEWER("Reviewer"),
     READER("Reader"),
-    ADMINISTRATOR("Administrator"),;
+    ADMINISTRATOR("Administrator"),
+    ;
 
     private final String displayName;
 

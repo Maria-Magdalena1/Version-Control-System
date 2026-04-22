@@ -20,7 +20,6 @@ public class ApprovalService {
     private final DocumentVersionService documentVersionService;
     private final AuditLogService auditLogService;
     private final DocumentRepository documentRepository;
-    //private final DocumentService documentService;
 
     @Autowired
     public ApprovalService(ApprovalRepository approvalRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService, DocumentRepository documentRepository) {

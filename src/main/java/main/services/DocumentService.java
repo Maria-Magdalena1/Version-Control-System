@@ -14,11 +14,14 @@ import main.web.DocumentDTO;
 import main.web.VersionComparisonResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,13 +33,15 @@ public class DocumentService {
     private final DocumentVersionService documentVersionService;
     private final AuditLogService auditLogService;
     private final DocumentFileService documentFileService;
+    private final UserService userService;
 
     @Autowired
-    public DocumentService(DocumentRepository documentRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService, DocumentFileService documentFileService) {
+    public DocumentService(DocumentRepository documentRepository, DocumentVersionService documentVersionService, AuditLogService auditLogService, DocumentFileService documentFileService, UserService userService) {
         this.documentRepository = documentRepository;
         this.documentVersionService = documentVersionService;
         this.auditLogService = auditLogService;
         this.documentFileService = documentFileService;
+        this.userService = userService;
     }
 
     @PreAuthorize("hasRole('AUTHOR')")
@@ -125,23 +130,32 @@ public class DocumentService {
     @PreAuthorize("hasAnyRole('READER', 'AUTHOR', 'REVIEWER', 'ADMINISTRATOR')")
     public byte[] exportToPdf(UUID documentId) {
         DocumentVersion activeVersion = getActiveVersion(documentId);
-
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+
             PdfWriter writer = new PdfWriter(outputStream);
             PdfDocument pdf = new PdfDocument(writer);
-            com.itextpdf.layout.Document pdfDocument = new com.itextpdf.layout.Document(pdf);
 
-            pdfDocument.add(new Paragraph("Title: " + activeVersion.getDocument().getTitle()));
-            pdfDocument.add(new Paragraph("Version: " + activeVersion.getVersionNumber()));
-            pdfDocument.add(new Paragraph("Author: " + activeVersion.getCreatedBy().getUsername()));
-            pdfDocument.add(new Paragraph("Date: " + activeVersion.getCreatedAt()));
-            pdfDocument.add(new Paragraph("Status: " + activeVersion.getStatus()));
-            pdfDocument.add(new Paragraph("Content: \n" + activeVersion.getContent()));
+            try (com.itextpdf.layout.Document pdfDocument =
+                         new com.itextpdf.layout.Document(pdf)) {
 
-            pdfDocument.close();
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+                pdfDocument.add(new Paragraph("Title: " + activeVersion.getDocument().getTitle()));
+                pdfDocument.add(new Paragraph("Version: " + activeVersion.getVersionNumber()));
+                pdfDocument.add(new Paragraph("Author: " + activeVersion.getCreatedBy().getUsername()));
+                pdfDocument.add(new Paragraph("Date: " + activeVersion.getCreatedAt().format(formatter)));
+                pdfDocument.add(new Paragraph("Status: " + activeVersion.getStatus()));
+
+                pdfDocument.add(new Paragraph("Content:"));
+                pdfDocument.add(new Paragraph(activeVersion.getContent()));
+            }
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String username = auth.getName();
+
+            User currentUser = userService.findByUsername(username);
 
             auditLogService.createLogForDocument(
-                    activeVersion.getCreatedBy(),
+                    currentUser,
                     "EXPORT TO PDF",
                     activeVersion.getDocument(),
                     activeVersion,

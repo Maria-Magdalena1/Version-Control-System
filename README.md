@@ -907,26 +907,6 @@ spring.jpa.show-sql=true
 - Maven 3.6+
 - MySQL Server 8.0+
 
-### Стъпки за стартиране:
-
-1. Клонирайте репозиторито
-```bash
-git clone <repository-url>
-cd SAP-Internship
-```
-
-2. Конфигурирайте базата данни в `src/main/resources/application.properties`
-
-3. Билдвайте проекта
-```bash
-mvn clean install
-```
-
-4. Стартирайте приложението
-```bash
-mvn spring-boot:run
-```
-
 Приложението е конзолно. Стартирайте го като изпълните `VersionControlSystemApplication.java`, след което `ConsoleRunner` ще поеме управлението на потребителския интерфейс.
 
 ---

@@ -76,22 +76,6 @@ Version Control System е Spring Boot приложение за управлен
 
 ---
 
-## Диаграми
-
-### Архитектурна диаграма
-
-![Архитектурна диаграма](architecture_diagram.svg)
-
-### ER Диаграма
-
-![ER Диаграма на базата данни](ER_diagram.png)
-
-### Lean Canvas
-
-![Lean Canvas](lean_canvas.png)
-
----
-
 ## База данни
 
 ### Структура на базата данни
